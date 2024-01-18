@@ -1,0 +1,1751 @@
+---
+title: "Trust in the Indian Government: Significant Factors and Regional Variations"
+author: "Ananya Pujary"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(haven)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(skimr)
+library(psych)
+library(corrplot)
+library(survey)
+library(MASS)
+library(stargazer)
+library(brant)
+library(jtools)
+library(ggeffects)
+library(stringr)
+library(lme4)
+library(sjstats)
+library(arm)
+library(modelsummary)
+library(janitor)
+```
+
+## Reading in the data
+
+```{r}
+# reading in the survey data
+indianbaro <- read_dta("/Users/ananyapujary/Desktop/DACSS/DACSS790Q/Final/W516_India/W5_India_merged_core_20220905_released.dta")
+dim(indianbaro)
+```
+
+## Dependent variables
+
+I'm reverse-coding the two dependent variables of trust in the national and local government to correctly reflect the underlying concept in a way that higher values indicate higher trust levels and lower values indicate lower trust values.
+```{r}
+# reverse-coding national govt trust
+indianbaro1 <- indianbaro %>%
+  mutate(nationalgovt_trust = case_when(
+    Q9 ==1 ~ 6,
+    Q9 ==2 ~ 5,
+    Q9 ==3 ~ 4,
+    Q9 ==4 ~ 3,
+    Q9 ==5 ~ 2,
+    Q9 ==6 ~ 1, 
+    Q9 >=97 ~ NA_real_))
+
+# reverse-coding national govt trust
+indianbaro1 <- indianbaro1 %>%
+  mutate(localgovt_trust = case_when(
+    Q15 ==1 ~ 6,
+    Q15 ==2 ~ 5,
+    Q15 ==3 ~ 4,
+    Q15 ==4 ~ 3,
+    Q15 ==5 ~ 2,
+    Q15 ==6 ~ 1, 
+    Q15 >=97 ~ NA_real_))
+
+```
+
+
+```{r}
+# response distributions for nationalgovt_trust
+mean(indianbaro1$nationalgovt_trust,na.rm = TRUE) # 4.258719
+var(indianbaro1$nationalgovt_trust,na.rm = TRUE) # 2.4583
+
+# graphing national govt trust response distribution
+x_axis_labels <- c('Distrust fully','Distrust somewhat','Trust somewhat','Trust fully')
+ggplot(subset(indianbaro1, !is.na(nationalgovt_trust)), aes(x=factor(nationalgovt_trust)))+
+  geom_bar(aes(y = (..count..)/sum(..count..)))+ 
+  labs(title = "Response Distribution for Trust in National Government in India",caption = "Source: Asian Barometer Survey (Wave 5)", x = "Trust in National Government", y = "Frequency") +
+  scale_x_discrete(labels = x_axis_labels) + scale_y_continuous(labels=scales::percent) +
+  theme_minimal()
+
+# response distributions for localgovt_trust
+mean(indianbaro1$localgovt_trust,na.rm = TRUE) # 4.045891
+var(indianbaro1$localgovt_trust,na.rm = TRUE) # 2.400012
+
+# graphing local govt trust response distribution
+ggplot(subset(indianbaro1, !is.na(localgovt_trust)), aes(x=factor(localgovt_trust)))+
+  geom_bar(aes(y = (..count..)/sum(..count..)))+ 
+  labs(title = "Response Distribution for Trust in Local Government in India", caption = "Source: Asian Barometer Survey (Wave 5)", x = "Trust in Local Government", y = "Frequency") +
+  scale_x_discrete(labels = x_axis_labels) + scale_y_continuous(labels=scales::percent) +
+  theme_minimal()
+
+```
+
+## Independent variables
+
+Reverse-coding some independent variables to better represent the concepts and reclassifying certain responses as NA:
+```{r}
+# economic condition - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(econ_condition = case_when(
+    Q1 ==1 ~ 5,
+    Q1 ==2 ~ 4,
+    Q1 ==3 ~ 3,
+    Q1 ==4 ~ 2,
+    Q1 ==5 ~ 1,
+    Q1 >=7 ~ NA_real_))
+
+# access to public service - roads - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(road_access = case_when(
+    Q39 ==1 ~ 4,
+    Q39 ==2 ~ 3,
+    Q39 ==3 ~ 2,
+    Q39 ==4 ~ 1,
+    Q39 ==0 ~ NA_real_,
+    Q39 >=7 ~ NA_real_))
+
+# access to public service - water - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(water_access = case_when(
+    Q40 ==1 ~ 4,
+    Q40 ==2 ~ 3,
+    Q40 ==3 ~ 2,
+    Q40 ==4 ~ 1,
+    Q40 ==0 ~ NA_real_,
+    Q40 >=7 ~ NA_real_))
+
+# access to public service - transport - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(transport_access = case_when(
+    Q41 ==1 ~ 4,
+    Q41 ==2 ~ 3,
+    Q41 ==3 ~ 2,
+    Q41 ==4 ~ 1,
+    Q41 ==0 ~ NA_real_,
+    Q41 >=7 ~ NA_real_))
+
+# access to public service - health - reverse-coding (all NAs) 
+indianbaro1 <- indianbaro1 %>%
+  mutate(health_access = case_when(
+    Q42 ==1 ~ 4,
+    Q42 ==2 ~ 3,
+    Q42 ==3 ~ 2,
+    Q42 ==4 ~ 1,
+    Q42 ==0 ~ NA_real_,
+    Q42 >=7 ~ NA_real_))
+
+# access to public service - police - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(police_access = case_when(
+    Q43 ==1 ~ 4,
+    Q43 ==2 ~ 3,
+    Q43 ==3 ~ 2,
+    Q43 ==4 ~ 1,
+    Q43 ==0 ~ NA_real_,
+    Q43 >=7 ~ NA_real_))
+
+# access to public service - internet - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(internet_access = case_when(
+    Q44 ==1 ~ 4,
+    Q44 ==2 ~ 3,
+    Q44 ==3 ~ 2,
+    Q44 ==4 ~ 1,
+    Q44 ==0 ~ NA_real_,
+    Q44 >=7 ~ NA_real_))
+
+# perceived safety - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(perceived_safety = case_when(
+    Q45 ==1 ~ 4,
+    Q45 ==2 ~ 3,
+    Q45 ==3 ~ 2,
+    Q45 ==4 ~ 1,
+    Q45 >=7 ~ NA_real_))
+
+# governance quality - citizens can remove govt they dislike through election - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(citizen_electionpower = case_when(
+    Q108 ==1 ~ 4,
+    Q108 ==2 ~ 3,
+    Q108 ==3 ~ 2,
+    Q108 ==4 ~ 1,
+    Q108 >=7 ~ NA_real_))
+
+# governance quality - parties not in power have opportunity in elections - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(party_electionopp = case_when(
+    Q109 ==1 ~ 4,
+    Q109 ==2 ~ 3,
+    Q109 ==3 ~ 2,
+    Q109 ==4 ~ 1,
+    Q109 >=7 ~ NA_real_))
+
+# governance quality - no way to hold govt responsible 
+indianbaro1 <- indianbaro1 %>%
+  mutate(no_govtresponsible = case_when(
+    Q110 ==1 ~ 1,
+    Q110 ==2 ~ 2,
+    Q110 ==3 ~ 3,
+    Q110 ==4 ~ 4,
+    Q110 >=7 ~ NA_real_))
+
+# governance quality - no court action against leaders breaking laws 
+indianbaro1 <- indianbaro1 %>%
+  mutate(no_courtaction = case_when(
+    Q111 ==1 ~ 1,
+    Q111 ==2 ~ 2,
+    Q111 ==3 ~ 3,
+    Q111 ==4 ~ 4,
+    Q111 >=7 ~ NA_real_))
+
+# governance quality - all citizens treated equally - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(citizens_equal = case_when(
+    Q112 ==1 ~ 4,
+    Q112 ==2 ~ 3,
+    Q112 ==3 ~ 2,
+    Q112 ==4 ~ 1,
+    Q112 >=7 ~ NA_real_))
+
+# governance quality - rich/poor treated equally - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(richpoor_equal = case_when(
+    Q113 ==1 ~ 4,
+    Q113 ==2 ~ 3,
+    Q113 ==3 ~ 2,
+    Q113 ==4 ~ 1,
+    Q113 >=7 ~ NA_real_))
+
+# governance quality - basic necessities available - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(basic_needs = case_when(
+    Q114 ==1 ~ 4,
+    Q114 ==2 ~ 3,
+    Q114 ==3 ~ 2,
+    Q114 ==4 ~ 1,
+    Q114 >=7 ~ NA_real_))
+
+# governance quality - free speech - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(free_speech = case_when(
+    Q115 ==1 ~ 4,
+    Q115 ==2 ~ 3,
+    Q115 ==3 ~ 2,
+    Q115 ==4 ~ 1,
+    Q115 >=7 ~ NA_real_))
+
+# governance quality - join orgs without fear - reverse-coding
+indianbaro1 <- indianbaro1 %>%
+  mutate(orgs_nofear = case_when(
+    Q116 ==1 ~ 4,
+    Q116 ==2 ~ 3,
+    Q116 ==3 ~ 2,
+    Q116 ==4 ~ 1,
+    Q116 >=7 ~ NA_real_))
+
+# india perceived democracy scale
+indianbaro1 <- indianbaro1 %>%
+  mutate(perceived_democracy = case_when(
+    Q131 ==1 ~ 1,
+    Q131 ==2 ~ 2,
+    Q131 ==3 ~ 3,
+    Q131 ==4 ~ 4,
+    Q131 ==5 ~ 5,
+    Q131 ==6 ~ 6,
+    Q131 ==7 ~ 7,
+    Q131 ==8 ~ 8,
+    Q131 ==9 ~ 9,
+    Q131 ==10 ~ 10,
+    Q131 >=97 ~ NA_real_))
+
+```
+
+Since `road_access`,`water_access`,`transport_access`,`police_access`,`internet_access`are items under a question set about perceived access to public services, I'll be combining them into a single variable for ease of analysis and interpretation. I'm excluding the `health_access` variable from the scale since all of its observations are missing, suggesting that this question may not have been asked to respondents. First, I'm calculating the Cronbach's alpha value to infer the level of internal reliability this scale would have:
+```{r}
+
+# calculate alpha
+service_access <- data.frame(indianbaro1$road_access, indianbaro1$water_access, indianbaro1$transport_access, indianbaro1$police_access, indianbaro1$internet_access)
+
+alpha(service_access, na.rm = TRUE, check.keys=TRUE)
+```
+The raw alpha value for this set is 0.788, suggesting that it has high internal consistency. Removing any of these items would reduce the raw alpha value (`road_access` = 0.751; `water_access` = 0.735; `transport_access` = 0.719; `police_access` = 0.751; `internet_access` = 0.785). Next, I'm creating the scale and looking at item correlations:
+```{r}
+# creating scale
+indianbaro1 <- indianbaro1 %>%
+  mutate(service_access = (road_access + water_access + transport_access + police_access + internet_access) / 5)
+summary(indianbaro1$service_access)
+
+# creating a dataframe for the correlation matrix
+df3 <- data.frame(indianbaro1$road_access, indianbaro1$water_access, indianbaro1$transport_access, indianbaro1$police_access, indianbaro1$internet_access, indianbaro1$service_access)
+
+# correlation matrix
+cor_matrix3 <- cor(df3, use = "complete.obs")  
+print(cor_matrix3)
+corrplot(cor_matrix3)
+```
+
+Similarly, I'm interested in combining the items of `citizen_electionpower`, `party_electionopp`, `citizens_equal`, `richpoor_equal`, `basic_needs`, `free_speech`, and `orgs_nofear` since they belong to an overarching question about the respondents' perceived quality of governance. I removed `no_courtaction`, `no_govtresponsible` since these items were originally reverse-coded in the survey, but were not answered as intended by respondents. This is evident through their negative correlations with other terms in the correlation matrix below:
+```{r}
+test_govtquality <- data.frame(indianbaro1$citizen_electionpower, indianbaro1$party_electionopp, indianbaro1$no_courtaction, indianbaro1$no_govtresponsible, indianbaro1$citizens_equal, indianbaro1$richpoor_equal, indianbaro1$basic_needs, indianbaro1$free_speech, indianbaro1$orgs_nofear)
+
+## correlation matrix
+cor_matrix_test <- cor(test_govtquality, use = "complete.obs")  
+print(cor_matrix_test)
+corrplot(cor_matrix_test)
+```
+Calculating the Cronbach's alpha value for this scale to determine its internal consistency:
+```{r}
+# calculate alpha
+governance_quality <- data.frame(indianbaro1$citizen_electionpower, indianbaro1$party_electionopp, indianbaro1$citizens_equal, indianbaro1$richpoor_equal, indianbaro1$basic_needs, indianbaro1$free_speech, indianbaro1$orgs_nofear)
+
+alpha(governance_quality, na.rm = TRUE, check.keys=TRUE)
+```
+The raw alpha value is 0.765, suggesting high internal consistency and reliability. The alpha value for `citizen_electionpower` (0.779) is higher, so removing it would slightly increase the alpha value.
+
+Creating the scale for `governance_quality` and checking item correlations:
+```{r}
+# creating scale
+indianbaro1 <- indianbaro1 %>%
+  mutate(governance_quality = (citizen_electionpower + party_electionopp + citizens_equal + richpoor_equal + basic_needs + free_speech + orgs_nofear) / 7)
+summary(indianbaro1$governance_quality)
+
+# creating a dataframe for the correlation matrix
+df2 <- data.frame(indianbaro1$citizen_electionpower, indianbaro1$party_electionopp, indianbaro1$citizens_equal, indianbaro1$richpoor_equal, indianbaro1$basic_needs, indianbaro1$free_speech, indianbaro1$orgs_nofear, indianbaro1$governance_quality)
+
+# correlation matrix
+cor_matrix2 <- cor(df2, use = "complete.obs")  
+print(cor_matrix2)
+corrplot(cor_matrix2)
+```
+
+## Control variables
+
+This project includes gender, age, educational attainment, religiosity level, subjective social status, and subjective social mobility as control variables. Race/ethnicity, a common control variable, was excluded since all of its observations were missing and was probably not asked of this sample. Recoding and factoring some of these variables to make them analysis-ready.
+
+```{r}
+# gender
+indianbaro1 <- indianbaro1 %>%
+  rename(female = SE2)
+
+# age
+indianbaro1 <- indianbaro1 %>%
+  rename(age = Se3_1)
+
+age_breaks <- c(18, 30, 40, 50, 65, 100)
+
+# create a new variable with age groups
+indianbaro1$age_group <- cut(indianbaro1$age, 
+                      age_breaks, labels = c("18-29", "30-39", "40-49", "50-64", "65+"), 
+                      include.lowest = TRUE)
+
+# education
+indianbaro1 <- indianbaro1 %>%
+  mutate(education = case_when(
+    SE5 <= 4 ~ 1, # less than high school
+    SE5 <= 7 ~ 2, # completed high school
+    SE5 == 8 ~ 3, # some university education
+    SE5 <= 10 ~ 4, # completed university
+    SE5 >=97 ~ NA_real_))
+
+# converting education into a factor
+# indianbaro1$education_f <- factor(indianbaro1$education)
+# # renaming factor levels
+# levels(indianbaro1$education_f) <- c("Less than HS","High School", "Some University","Advanced Degree")
+
+# religiosity level
+indianbaro1 <- indianbaro1 %>%
+  mutate(religiosity = case_when(
+    SE7a ==1 ~ 4,
+    SE7a ==2 ~ 3,
+    SE7a ==3 ~ 2,
+    SE7a ==4 ~ 1,
+    SE7a >=8 ~ NA_real_))
+
+# subjective social status
+indianbaro1 <- indianbaro1 %>%
+  mutate(perc_socialstatus = case_when(
+    SE12 ==1 ~ 1,
+    SE12 ==2 ~ 2,
+    SE12 ==3 ~ 3,
+    SE12 ==4 ~ 4,
+    SE12 ==5 ~ 5,
+    SE12 ==6 ~ 6,
+    SE12 ==7 ~ 7,
+    SE12 ==8 ~ 8,
+    SE12 ==9 ~ 9,
+    SE12 ==10 ~ 10,
+    SE12 >=97 ~ NA_real_))
+
+# social mobility
+indianbaro1 <- indianbaro1 %>%
+  mutate(perc_socialmobility = case_when(
+    SE13a ==1 ~ 1,
+    SE13a ==2 ~ 2,
+    SE13a ==3 ~ 3,
+    SE13a ==4 ~ 4,
+    SE13a ==5 ~ 5,
+    SE13a ==6 ~ 6,
+    SE13a ==7 ~ 7,
+    SE13a ==8 ~ 8,
+    SE13a ==9 ~ 9,
+    SE13a ==10 ~ 10,
+    SE13a >=97 ~ NA_real_))
+
+```
+
+Lastly, applying weights:
+```{r}
+# adding survey weights
+indianbaro_weighted <- svydesign(ids = ~1,
+                           weights =~w,
+                           data = indianbaro1)
+```
+
+
+## Ordered Logistic Regression
+
+### Trust in National Government
+Estimating OLS and ordered logistic regression models:
+```{r}
+
+# nationalgovt_trust - ols model
+natl_ols <- glm(nationalgovt_trust ~  econ_condition + service_access + perceived_safety + governance_quality + perceived_democracy + female + age_group + education + religiosity + perc_socialstatus + perc_socialmobility, family = gaussian(link = "identity"), data = indianbaro1, weights = w)
+summary(natl_ols)
+
+# converting nationalgovt_trust into an ordered factor
+indianbaro1$nationalgovt_trust_o <- factor(indianbaro1$nationalgovt_trust, ordered = TRUE) 
+levels(indianbaro1$nationalgovt_trust_o) <- c("Distrust fully","Distrust a lot","Distrust somewhat","Trust somewhat","Trust a lot","Trust fully")
+
+# ordered logit for national govt trust
+natl_ordlog <-polr(nationalgovt_trust_o ~ econ_condition+service_access+perceived_safety+governance_quality+perceived_democracy+female+age_group+education+religiosity+perc_socialstatus+perc_socialmobility, data=indianbaro1, na.action = na.exclude, method = "logistic", weights = w) 
+
+# display regression results
+stargazer(natl_ordlog,natl_ols,type="text",digits=3, dep.var.labels = c("",""),model.names = FALSE,
+          column.labels = c("Trust in National Government (Ordered Logit)","Trust in National Government (OLS)"),
+          covariate.labels = c("Perceived Economic Conditions","Perceived Public Service Access","Perceived Safety","Governance Quality","Perceived Democracy","Female","Age Group: 30-39","Age Group: 40-49","Age Group: 50-64","Age Group: 65+","Education Level","Perceived Religiosity","Perceived Social Status","Perceived Social Mobility"),
+                               out="ordlog_olscomparison.txt")
+```
+
+
+```{r}
+#Test parallel regressions assumption
+brant(natl_ordlog)
+```
+The omnibus results are significant, so the parallel regressions assumption has been violated overall. It was also violated for `governance_quality`, although only marginally.
+
+Calculating fit statistics:
+```{r}
+glm_fit <- function(model) {
+  # Calculate Likelihood Ratio
+  lr <- logLik(model)
+  
+  # Calculate AIC
+  aic <- AIC(model)
+  
+  # Calculate BIC
+  n <- nobs(model)
+  p <- length(coef(model))
+  bic <- -2 * logLik(model) + p * log(n)
+  
+  # Calculate Deviance
+  deviance <- summary(model)$deviance
+
+  # Return the metrics as a list
+  metrics <- data.frame(Likelihood_Ratio = lr, AIC = aic, BIC = bic, Deviance = deviance)
+  return(metrics)
+}
+
+plot_summs(natl_ordlog)
+plot_summs(natl_ols)
+
+glm_fit(natl_ordlog)
+glm_fit(natl_ols)
+```
+
+The AIC value for the ordered logit model is 6127.711, and 9460.145 for the OLS model.
+
+#### Economic Condition
+
+Calculating the predicted probabilities to make inference easier and plot the results - using OLS since the coefficients are similar:
+```{r}
+# x = econ_condition
+ols_pred1<-ggpredict(natl_ols, terms="econ_condition") 
+print(ols_pred1) #Overview of the predicted probability results 
+
+# plot
+custom_order <- c("Very bad","Bad","So so (not good nor bad)","Good","Very good")
+
+ggplot(ols_pred1, aes(x = x, y = predicted)) +
+     geom_point() +   theme_minimal(base_size = 10) +
+    labs(x = "Perceived Economic Conditions", y = "Predicted Mean", 
+         title = "Predicted Mean with Confidence Intervals (National Government Trust)") +
+  scale_color_manual(labels = c("Distrust fully","Distrust a lot","Distrust somewhat","Trust somewhat","Trust a lot","Trust fully"), values = c("#e5e5e5","#c9c9c9","#aeaeae","#838383","#3a3a3a","#000000")) +
+  labs(color = "Trust in National Government") +
+    geom_errorbar(aes(ymin=conf.low, ymax=conf.high),
+                  linewidth=.3,    # Thinner lines
+                  width=.2)  + scale_x_discrete(limits = custom_order)
+  
+```
+
+#### Perceived Safety
+
+```{r}
+# x = perceived_safety
+ols_pred2<-ggpredict(natl_ols, terms="perceived_safety") 
+print(ols_pred2) #Overview of the predicted probability results 
+
+# plot
+custom_order <- c("Very unsafe","Unsafe","Safe","Very safe")
+
+ggplot(ols_pred2, aes(x = x, y = predicted)) +
+     geom_point() +   theme_minimal(base_size = 10) +
+    labs(x = "Perceived Safety", y = "Predicted Mean", 
+         title = "Predicted Mean with Confidence Intervals (National Government Trust)") +
+  scale_color_manual(labels = c("Distrust fully","Distrust a lot","Distrust somewhat","Trust somewhat","Trust a lot","Trust fully"), values = c("#e5e5e5","#c9c9c9","#aeaeae","#838383","#3a3a3a","#000000")) +
+  labs(color = "Trust in National Government") +
+    geom_errorbar(aes(ymin=conf.low, ymax=conf.high),
+                  linewidth=.3,    # Thinner lines
+                  width=.2)  + scale_x_discrete(limits = custom_order)
+```
+
+
+
+#### Governance Quality
+
+```{r}
+# x = governance_quality
+ols_pred3<-ggpredict(natl_ols, terms="governance_quality") 
+print(ols_pred3) #Overview of the predicted probability results 
+
+ols_pred3 <- ols_pred3 %>%
+  filter(x == c(1,2,3,4))
+
+# plot
+custom_order <- c("Strongly disagree","Somewhat disagree","Somewhat agree","Strongly agree")
+
+ggplot(ols_pred3, aes(x = x, y = predicted)) +
+     geom_point() +   theme_minimal(base_size = 10) +
+    labs(x = "Perceived Quality of Governance", y = "Predicted Mean", 
+         title = "Predicted Mean with Confidence Intervals (National Government Trust)") +
+  scale_color_manual(labels = c("Distrust fully","Distrust a lot","Distrust somewhat","Trust somewhat","Trust a lot","Trust fully"), values = c("#e5e5e5","#c9c9c9","#aeaeae","#838383","#3a3a3a","#000000")) +
+  labs(color = "Trust in National Government") +
+    geom_errorbar(aes(ymin=conf.low, ymax=conf.high),
+                  linewidth=.3,    # Thinner lines
+                  width=.2)  + scale_x_discrete(limits = custom_order)
+```
+
+
+#### Perceived Democracy
+
+```{r}
+# x = perceived democracy
+ols_pred4<-ggpredict(natl_ols, terms="perceived_democracy") 
+print(ols_pred4) #Overview of the predicted probability results 
+
+# plot
+custom_order <- c("Completely undemocratic","2","3","4","5","6","7","8","9","Completely democratic")
+
+ggplot(ols_pred4, aes(x = x, y = predicted)) +
+     geom_point() +   theme_minimal(base_size = 10) +
+    labs(x = "Perception of India as a Democracy", y = "Predicted Mean", 
+         title = "Predicted Mean with Confidence Intervals (National Government Trust)") +
+  scale_color_manual(labels = c("Distrust fully","Distrust a lot","Distrust somewhat","Trust somewhat","Trust a lot","Trust fully"), values = c("#e5e5e5","#c9c9c9","#aeaeae","#838383","#3a3a3a","#000000")) +
+  labs(color = "Trust in National Government") +
+    geom_errorbar(aes(ymin=conf.low, ymax=conf.high),
+                  linewidth=.3,    # Thinner lines
+                  width=.2)  + scale_x_discrete(limits = custom_order, labels = scales::wrap_format(10))
+```
+
+#### Perceived Public Service Access
+
+```{r}
+# x = perceived public service access
+ols_pred5<-ggpredict(natl_ols, terms="service_access") 
+print(ols_pred5) #Overview of the predicted probability results 
+
+ols_pred5 <- ols_pred5 %>%
+  filter(x == c(1,2,3,4))
+
+# plot
+custom_order <- c("Very difficult","Difficult","Easy","Very easy")
+
+ggplot(ols_pred5, aes(x = x, y = predicted)) +
+     geom_point() +   theme_minimal(base_size = 10) +
+    labs(x = "Perceived Access to Public Services", y = "Predicted Mean", 
+         title = "Predicted Mean with Confidence Intervals (National Government Trust)") +
+  scale_color_manual(labels = c("Distrust fully","Distrust a lot","Distrust somewhat","Trust somewhat","Trust a lot","Trust fully"), values = c("#e5e5e5","#c9c9c9","#aeaeae","#838383","#3a3a3a","#000000")) +
+  labs(color = "Trust in National Government") +
+    geom_errorbar(aes(ymin=conf.low, ymax=conf.high),
+                  linewidth=.3,    # Thinner lines
+                  width=.2)  + scale_x_discrete(limits = custom_order, labels = scales::wrap_format(10))
+
+```
+
+### Trust in Local Government
+
+Estimating OLS and ordered logistic regression models:
+```{r}
+# localgovt_trust - ols
+local_ols <- glm(localgovt_trust ~  econ_condition + service_access + perceived_safety + governance_quality + perceived_democracy + female + age_group + education + religiosity + perc_socialstatus + perc_socialmobility, family = gaussian(link = "identity"), data = indianbaro1, weights = w)
+summary(local_ols)
+
+# localgovt_trust - ordlog
+indianbaro1$localgovt_trust_o <- factor(indianbaro1$localgovt_trust, ordered = TRUE) #Setting DV = ordered for analysis 
+
+levels(indianbaro1$localgovt_trust_o) <- c("Distrust fully","Distrust a lot","Distrust somewhat","Trust somewhat","Trust a lot","Trust fully")
+
+# ordlog
+local_ordlog <-polr(localgovt_trust_o ~ econ_condition+service_access+perceived_safety+governance_quality+perceived_democracy+female+age_group+education+religiosity+perc_socialstatus+perc_socialmobility, data=indianbaro1, na.action = na.exclude, method = "logistic", weights = w) 
+
+# display regression results
+stargazer(local_ordlog,local_ols,type="text",digits=3, dep.var.labels = c("",""),model.names = FALSE,
+          column.labels = c("Trust in Local Government (Ordered Logit)","Trust in Local Government (OLS)"),
+          covariate.labels = c("Perceived Economic Conditions","Perceived Public Service Access","Perceived Safety","Governance Quality","Perceived Democracy","Female","Age Group: 30-39","Age Group: 40-49","Age Group: 50-64","Age Group: 65+","Education Level","Perceived Religiosity","Perceived Social Status","Perceived Social Mobility"),
+                               out="ordlog_olscomparison2.txt")
+```
+These regression results show that the coefficients of both the ordered logit and OLS models are similar in value.
+
+```{r}
+#Test parallel regressions assumption
+brant(local_ordlog)
+```
+The omnibus results are significant, so the parallel regressions assumption has been violated overall. It was also violated for `perceived_safety`, `econ_condition`,`perceived_democracy`, `perc_socialstatus`, and `perc_socialmobility`.
+
+Converting these variables into factors, re-estimating the model, and doing the Brant test again:
+```{r}
+# converting econ_condition into a factor
+indianbaro1$econ_condition_f <- factor(indianbaro1$econ_condition)
+# renaming factor levels
+levels(indianbaro1$econ_condition_f) <- c("Very bad","Bad","So so (not good nor bad)","Good","Very good")
+
+# converting perceived_safety into a factor
+indianbaro1$perceived_safety_f <- factor(indianbaro1$perceived_safety)
+# renaming factor levels
+levels(indianbaro1$perceived_safety_f) <- c("Very unsafe","Unsafe","Safe","Very safe")
+
+# converting perceived_democracy into a factor
+indianbaro1$perceived_democracy_f <- factor(indianbaro1$perceived_democracy)
+# renaming factor levels
+levels(indianbaro1$perceived_democracy_f) <- c("Completely undemocratic","2","3","4","5","6","7","8","9","Completely democratic")
+
+# converting perc_socialstatus into a factor
+indianbaro1$perc_socialstatus_f <- factor(indianbaro1$perc_socialstatus)
+# renaming factor levels
+levels(indianbaro1$perc_socialstatus_f) <- c("Lowest status","2","3","4","5","6","7","8","9","Highest status")
+
+# converting perc_socialmobility into a factor
+indianbaro1$perc_socialmobility_f <- factor(indianbaro1$perc_socialmobility)
+# renaming factor levels
+levels(indianbaro1$perc_socialmobility_f) <- c("Poorest","2","3","4","5","6","7","8","9","Richest")
+
+# re-estimating model
+local_ordlog1 <-polr(localgovt_trust_o ~ econ_condition_f+service_access+perceived_safety_f+governance_quality+perceived_democracy_f+female+age_group+education+religiosity+perc_socialstatus_f+perc_socialmobility_f, data=indianbaro1, na.action = na.exclude, method = "logistic", weights = w) 
+
+
+#Test parallel regressions assumption
+brant(local_ordlog1)
+
+```
+The results above suggest that converting these variables into factors removed some of the significance and reduced the violation of the parallel regressions assumption.
+
+Re-estimating the OLS model:
+```{r}
+local_ols1 <- glm(localgovt_trust ~ econ_condition_f+service_access+perceived_safety_f+governance_quality+perceived_democracy_f+female+age_group+education+religiosity+perc_socialstatus_f+perc_socialmobility_f, family = gaussian(link = "identity"), data = indianbaro1, weights = w)
+summary(local_ols1)
+```
+
+Calculating fit statistics:
+```{r}
+glm_fit <- function(model) {
+  # Calculate Likelihood Ratio
+  lr <- logLik(model)
+  
+  # Calculate AIC
+  aic <- AIC(model)
+  
+  # Calculate BIC
+  n <- nobs(model)
+  p <- length(coef(model))
+  bic <- -2 * logLik(model) + p * log(n)
+  
+  # Calculate Deviance
+  deviance <- summary(model)$deviance
+
+  # Return the metrics as a list
+  metrics <- data.frame(Likelihood_Ratio = lr, AIC = aic, BIC = bic, Deviance = deviance)
+  return(metrics)
+}
+
+plot_summs(local_ordlog1)
+plot_summs(local_ols1)
+
+glm_fit(local_ordlog1)
+glm_fit(local_ols1)
+```
+
+The AIC value for the ordered logit model is 6290.145, while its value for the OLS model is 9564.782. Hence, the ordered logit model is a better fit.
+
+
+#### Economic Condition
+
+```{r}
+# x = econ_condition
+ols_pred6<-ggpredict(local_ols1, terms="econ_condition_f") 
+print(ols_pred6) #Overview of the predicted probability results 
+
+ggplot(ols_pred6, aes(x = x, y = predicted)) +
+     geom_point() +   theme_minimal(base_size = 10) +
+    labs(x = "Perceived Economic Conditions", y = "Predicted Mean", 
+         title = "Predicted Mean with Confidence Intervals (Local Government Trust)") +
+    geom_errorbar(aes(ymin=conf.low, ymax=conf.high),
+                  linewidth=.3,    # Thinner lines
+                  width=.2)
+
+```
+
+
+#### Perceived Safety
+
+```{r}
+# x = perceived_safety
+ols_pred7<-ggpredict(local_ols1, terms="perceived_safety_f") 
+print(ols_pred7) #Overview of the predicted probability results 
+
+ggplot(ols_pred7, aes(x = x, y = predicted)) +
+     geom_point() +   theme_minimal(base_size = 10) +
+    labs(x = "Perceived Safety", y = "Predicted Mean", 
+         title = "Predicted Mean with Confidence Intervals (Local Government Trust)") +
+    geom_errorbar(aes(ymin=conf.low, ymax=conf.high),
+                  linewidth=.3,    # Thinner lines
+                  width=.2)
+```
+
+
+
+#### Governance Quality
+
+```{r}
+# x = governance_quality
+ols_pred8<-ggpredict(local_ols1, terms="governance_quality") 
+print(ols_pred8) #Overview of the predicted probability results 
+
+# since this variable also has decimal values, filtering out the whole numbers that have meanings associated with them for a clearer graph
+ols_pred8 <- ols_pred8 %>%
+  filter(x == c(1,2,3,4))
+
+# plot
+custom_order <- c("Strongly disagree","Somewhat disagree","Somewhat agree","Strongly agree")
+
+ggplot(ols_pred8, aes(x = x, y = predicted)) +
+     geom_point() +   theme_minimal(base_size = 10) +
+    labs(x = "Perceived Quality of Governance", y = "Predicted Mean", 
+         title = "Predicted Mean with Confidence Intervals (Local Government Trust)") +
+  # scale_color_manual(labels = c("Distrust fully","Distrust a lot","Distrust somewhat","Trust somewhat","Trust a lot","Trust fully"), values = c("#e5e5e5","#c9c9c9","#aeaeae","#838383","#3a3a3a","#000000")) +
+  # labs(color = "Trust in Local Government") +
+    geom_errorbar(aes(ymin=conf.low, ymax=conf.high),
+                  linewidth=.3,
+                  width=.2)  + scale_x_discrete(limits = custom_order)
+```
+
+#### Perceived Democracy
+
+```{r}
+# x = perceived democracy
+ols_pred9<-ggpredict(local_ols1, terms="perceived_democracy_f") 
+print(ols_pred9)
+
+# plot
+# custom_order <- c("Completely undemocratic","2","3","4","5","6","7","8","9","Completely democratic")
+
+ggplot(ols_pred9, aes(x = x, y = predicted)) +
+     geom_point() +   theme_minimal(base_size = 10) +
+    labs(x = "Perception of India as a Democracy", y = "Predicted Mean", 
+         title = "Predicted Mean with Confidence Intervals (Local Government Trust)") +
+    geom_errorbar(aes(ymin=conf.low, ymax=conf.high),
+                  linewidth=.3,   
+                  width=.2) + scale_x_discrete(labels = scales::wrap_format(10))
+```
+
+#### Perceived Public Service Access
+
+```{r}
+# x = perceived public service access
+ols_pred10<-ggpredict(local_ols1, terms="service_access") 
+print(ols_pred10)
+
+# since it has decimal values, filtering for whole values that have meaning attached to them to interpret better
+ols_pred10 <- ols_pred10 %>%
+  filter(x == c(1,2,3,4))
+
+# plot
+custom_order <- c("Very difficult","Difficult","Easy","Very easy")
+
+ggplot(ols_pred10, aes(x = x, y = predicted)) +
+     geom_point() +   theme_minimal(base_size = 10) +
+    labs(x = "Perceived Access to Public Services", y = "Predicted Mean", 
+         title = "Predicted Mean with Confidence Intervals (Local Government Trust)") +
+    geom_errorbar(aes(ymin=conf.low, ymax=conf.high),
+                  linewidth=.3,    
+                  width=.2)  + scale_x_discrete(limits = custom_order, labels = scales::wrap_format(10))
+```
+
+### National versus Local Government Trust
+
+Comparing the ordered logit models for national and local government trust:
+```{r}
+stargazer(natl_ordlog, local_ordlog1,type="text",digits=3,
+           dep.var.labels = c("Trust in National Government","Trust in Local Government"),
+          covariate.labels = c("Perceived Economic Conditions","Perceived Economic Conditions: Bad","Perceived Economic Conditions: So so (not good nor bad)","Perceived Economic Conditions: Good","Perceived Economic Conditions: Very good","Perceived Public Service Access","Perceived Safety","Perceived Safety: Unsafe","Perceived Safety: Safe","Perceived Safety: Very safe","Governance Quality","Perceived Democracy","Perceived Democracy: 2","Perceived Democracy: 3","Perceived Democracy: 4","Perceived Democracy: 5","Perceived Democracy: 6","Perceived Democracy: 7","Perceived Democracy: 8","Perceived Democracy: 9","Perceived Democracy: Completely democratic","Female","Age Group: 30-39","Age Group: 40-49","Age Group: 50-64","Age Group: 65+","Education Level","Perceived Religiosity","Perceived Social Status","Perceived Social Mobility","Perceived Social Status: 2","Perceived Social Status: 3","Perceived Social Status: 4","Perceived Social Status: 5","Perceived Social Status: 6","Perceived Social Status: 7","Perceived Social Status: 8","Perceived Social Status: 9","Perceived Social Status: Highest status","Perceived Social Mobility: 2","Perceived Social Mobility: 3","Perceived Social Mobility: 4","Perceived Social Mobility: 5","Perceived Social Mobility: 6","Perceived Social Mobility: 7","Perceived Social Mobility: 8","Perceived Social Mobility: 9","Perceived Social Mobility: Richest"),
+           out="ordlog_olscomparison.htm")
+```
+## interpret
+
+## Multilevel Model
+
+Using the varying intercepts-varying slopes model with state as the grouping variable to observe state-wise differences in local and national government trust:
+```{r}
+# grouping variable: region
+indianbaro1$Region <- factor(indianbaro1$Region)
+# renaming factor levels
+levels(indianbaro1$Region) <- c("Andhra Pradesh","Assam","Bihar","Gujarat","Haryana","Karnataka","Kerala","Madhya Pradesh","Maharashtra","Odisha","Punjab","Rajasthan","Tamil Nadu","Uttar Pradesh","West Bengal","Delhi","Jharkhand","Chhattisgarh","Telangana")
+```
+
+
+```{r}
+# including only complete cases in analysis
+indianbaro2 <- indianbaro1[complete.cases(indianbaro1$nationalgovt_trust,indianbaro1$localgovt_trust,indianbaro1$econ_condition,indianbaro1$service_access,indianbaro1$perceived_safety,indianbaro1$governance_quality,indianbaro1$perceived_democracy,indianbaro1$female,indianbaro1$age_group,indianbaro1$education_f,indianbaro1$religiosity,indianbaro1$perc_socialstatus,indianbaro1$perc_socialmobility), ]
+
+clusters <- length(unique(indianbaro2$Region[!is.na(indianbaro2$Region)]))
+```
+
+### Trust in National Government
+
+Calculating the interclass correlation value for national government trust with region as the grouping variable to check if there are any clustering issues:
+```{r}
+# Varying Intercept Model - For Interclass Correlation 
+# national govt trust
+mlm_n <- lmer(nationalgovt_trust ~ 1 + (1|Region), data = indianbaro2, weights = w)
+summary(mlm_n)
+
+icc<-0.3089/(0.3089+2.0321)
+print(icc) # 0.1319522
+```
+The interclass correlation for this model is 0.13, which indicates that there may be a clustering issue in the data. To deal with this, a multilevel model will be used that allows for slopes to vary based on group membership, in this case, state.
+
+#### Economic Condition
+
+```{r}
+# specifying the model
+mlm_n1 <- lmer(nationalgovt_trust ~ econ_condition + service_access + perceived_safety + governance_quality + perceived_democracy + female + age_group + education + religiosity + perc_socialstatus + perc_socialmobility + (1 + econ_condition|Region), data = indianbaro2, weights = w)
+summary(mlm_n1)
+
+# Region-level estimates
+round(ranef(mlm_n1)$Region, digits = 3)
+
+coef_mlmn1<- round(coef(mlm_n1)$Region, digits = 3)
+
+coef_mlmn1$Region <- rownames(coef_mlmn1)
+
+# Average estimates
+round(fixef(mlm_n1), digits = 3)
+
+clusters <- length(unique(coef_mlmn1$Region[!is.na(coef_mlmn1$Region)]))
+
+# Standard errors
+round(se.fixef(mlm_n1), digits = 3)
+```
+
+```{r}
+# creating a dataframe with relevant standard errors by region
+df_mlmn1<- data.frame( se.ranef = round(se.ranef(mlm_n1)$Region, digits = 3))
+# adding region as a column to this dataframe
+df_mlmn1$Region <- rownames(df_mlmn1)
+```
+
+```{r}
+###Graph Random Slope Coefficients by Group Level 
+
+mlm_graphn1<-cbind(coef_mlmn1, df_mlmn1)
+mlm_graphn1<-clean_names(mlm_graphn1)
+names(mlm_graphn1)
+
+###Add CIs for the Random Slope Coefficients
+mlm_graphn1 <- mlm_graphn1 %>%
+  mutate(
+    lower_ci_va = econ_condition - 1.96 * se_ranef_econ_condition,
+    upper_ci_va = econ_condition + 1.96 * se_ranef_econ_condition
+  )
+
+mlm_graphn1$region<-reorder(mlm_graphn1$region, -mlm_graphn1$econ_condition) #reorder descending intercepts
+
+ggplot(mlm_graphn1, aes(x = region, y = econ_condition)) +
+  geom_point(size=3) +   theme_minimal(base_size = 13) +
+  labs(x = "State", y = "OLS Coefficient", 
+       title = "Impact of Perceived Economic Conditions on National Government Trust", 
+       subtitle= "Results are OLS Coefficients from Varying Intercept, Varying Slope Model") +
+  labs(color = "Trust in National Government ") +
+  theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1)) +
+  geom_errorbar(aes(ymin=lower_ci_va, ymax=upper_ci_va),
+                linewidth=.3,    # Thinner lines
+                width=.2, position = position_dodge(width=.7))+
+  scale_y_continuous(limits = c(0, 1.5), breaks = seq(0, 1.5, by = 0.5)) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylim(-0.5,1)
+
+
+
+###GGPredict for Predicted Values
+#More difficult with MLM models because you have to specify more attributes
+pred_mlmn1<-ggpredict(mlm_n1, terms=c("econ_condition", "Region"), 
+                    type="random", 
+          interval="confidence") 
+
+print(pred_mlmn1)
+
+###Make it a line plot
+ggplot(pred_mlmn1, aes(x = x, y = predicted)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  facet_wrap(~group, nrow = 3) +
+  labs(
+    x = "Perceived Economic Condition",
+    y = "Predicted National Government Trust",
+    title = "National Government Trust by State",
+    subtitle= "Results are Predicted Values from Varying Intercept, Varying Slope Model") +
+ scale_x_discrete(limits = c("Very bad","2","3","4","Very good"), labels = scales::wrap_format(10)) + theme_minimal()
+
+```
+- matters the most in Rajasthan
+- not much effect for Tamil Nadu - trends downwards
+
+#### Perceived Safety
+
+```{r}
+# specifying model
+mlm_n2 <- lmer(nationalgovt_trust ~ econ_condition + service_access + perceived_safety + governance_quality + perceived_democracy + female + age_group + education + religiosity + perc_socialstatus + perc_socialmobility + (1 + perceived_safety|Region), data = indianbaro2, weights = w)
+summary(mlm_n2)
+
+# Country-level estimates
+round(ranef(mlm_n2)$Region, digits = 3)
+
+coef_mlmn2<- round(coef(mlm_n2)$Region, digits = 3)
+
+coef_mlmn2$Region <- rownames(coef_mlmn2)
+
+# Average estimates
+round(fixef(mlm_n2), digits = 3)
+
+clusters <- length(unique(coef_mlmn2$Region[!is.na(coef_mlmn2$Region)]))
+
+# Standard errors
+round(se.fixef(mlm_n2), digits = 3)
+```
+
+```{r}
+# creating dataframe with standard errors
+df_mlmn2<- data.frame(se.ranef = round(se.ranef(mlm_n2)$Region, digits = 3))
+
+# adding region as a column
+df_mlmn2$Region <- rownames(df_mlmn2)
+```
+
+
+```{r}
+###Graph Random Slope Coefficients by Group Level 
+
+mlm_graphn2<-cbind(coef_mlmn2, df_mlmn2)
+mlm_graphn2<-clean_names(mlm_graphn2)
+names(mlm_graphn2)
+
+###Add CIs for the Random Slope Coefficients
+mlm_graphn2 <- mlm_graphn2 %>%
+  mutate(
+    lower_ci_va = perceived_safety - 1.96 * se_ranef_perceived_safety,
+    upper_ci_va = perceived_safety + 1.96 * se_ranef_perceived_safety
+  )
+
+mlm_graphn2$region<-reorder(mlm_graphn2$region, -mlm_graphn2$perceived_safety) #reorder descending intercepts
+
+ggplot(mlm_graphn2, aes(x = region, y = perceived_safety)) +
+  geom_point(size=3) +   theme_minimal(base_size = 13) +
+  labs(x = "State", y = "OLS Coefficient", 
+       title = "Impact of Perceived Safety on National Government Trust", 
+       subtitle= "Results are OLS Coefficients from Varying Intercept, Varying Slope Model") +
+  labs(color = "Trust in National Government") +
+  theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1)) +
+  geom_errorbar(aes(ymin=lower_ci_va, ymax=upper_ci_va),
+                linewidth=.3,    # Thinner lines
+                width=.2, position = position_dodge(width=.7))+
+  scale_y_continuous(limits = c(0, 1.5), breaks = seq(0, 1.5, by = 0.5)) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylim(-1,1)
+
+###GGPredict for Predicted Values
+#More difficult with MLM models because you have to specify more attributes
+pred_mlmn2<-ggpredict(mlm_n2, terms=c("perceived_safety", "Region"), 
+                    type="random", 
+          interval="confidence") 
+
+print(pred_mlmn2)
+
+###Make it a line plot
+ggplot(pred_mlmn2, aes(x = x, y = predicted)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  facet_wrap(~group, nrow = 3) +
+  labs(
+    x = "Perceived Safety",
+    y = "Predicted National Government Trust",
+    title = "National Government Trust by State",
+    subtitle= "Results are Predicted Values from Varying Intercept, Varying Slope Model") +
+ scale_x_discrete(limits = c("Very unsafe","2","3","Very safe"), labels = scales::wrap_format(10)) + theme_minimal()
+
+```
+- safety is most important in Karnataka in determining trust in national government
+
+#### Governance Quality
+
+```{r}
+# specifying model
+mlm_n3 <- lmer(nationalgovt_trust ~ econ_condition + service_access + perceived_safety + governance_quality + perceived_democracy + female + age_group + education + religiosity + perc_socialstatus + perc_socialmobility + (1 + governance_quality|Region), data = indianbaro2, weights = w)
+summary(mlm_n3)
+
+# Country-level estimates
+round(ranef(mlm_n3)$Region, digits = 3)
+
+coef_mlmn3<- round(coef(mlm_n3)$Region, digits = 3)
+
+coef_mlmn3$Region <- rownames(coef_mlmn3)
+
+# Average estimates
+round(fixef(mlm_n3), digits = 3)
+
+clusters <- length(unique(coef_mlmn3$Region[!is.na(coef_mlmn3$Region)]))
+
+# Standard errors
+round(se.fixef(mlm_n3), digits = 3)
+```
+
+```{r}
+# create dataframe for standard errors
+df_mlmn3<- data.frame(se.ranef = round(se.ranef(mlm_n3)$Region, digits = 3))
+
+# add region as a column
+df_mlmn3$Region <- rownames(df_mlmn3)
+```
+
+```{r}
+###Graph Random Slope Coefficients by Group Level 
+
+mlm_graphn3<-cbind(coef_mlmn3, df_mlmn3)
+mlm_graphn3<-clean_names(mlm_graphn3)
+names(mlm_graphn3)
+
+###Add CIs for the Random Slope Coefficients
+mlm_graphn3 <- mlm_graphn3 %>%
+  mutate(
+    lower_ci_va = governance_quality - 1.96 * se_ranef_governance_quality,
+    upper_ci_va = governance_quality + 1.96 * se_ranef_governance_quality
+  )
+
+#reorder descending intercepts
+mlm_graphn3$region<-reorder(mlm_graphn3$region, -mlm_graphn3$governance_quality) 
+
+ggplot(mlm_graphn3, aes(x = region, y = governance_quality)) +
+  geom_point(size=3) +   theme_minimal(base_size = 13) +
+  labs(x = "State", y = "OLS Coefficient", 
+       title = "Impact of Perceived Governance Quality on National Government Trust", 
+       subtitle= "Results are OLS Coefficients from Varying Intercept, Varying Slope Model") +
+  labs(color = "Trust in National Government") +
+  theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1)) +
+  geom_errorbar(aes(ymin=lower_ci_va, ymax=upper_ci_va),
+                linewidth=.3,    # Thinner lines
+                width=.2, position = position_dodge(width=.7))+
+  scale_y_continuous(limits = c(0, 1.5), breaks = seq(0, 1.5, by = 0.5)) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylim(-1,2)
+
+###GGPredict for Predicted Values
+#More difficult with MLM models because you have to specify more attributes
+pred_mlmn3<-ggpredict(mlm_n3, terms=c("governance_quality", "Region"), 
+                    type="random", 
+          interval="confidence") 
+
+print(pred_mlmn3)
+# filtering out the decimal values to get a cleaner graph - some values did not show up so I commented it out
+# pred_mlmn3 <- pred_mlmn3 %>%
+#   filter(x == c(1,2,3,4))
+
+###Make it a line plot
+ggplot(pred_mlmn3, aes(x = x, y = predicted)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  facet_wrap(~group, nrow = 3) +
+  labs(
+    x = "Perceived Governance Quality",
+    y = "Predicted National Government Trust",
+    title = "National Government Trust by State",
+    subtitle= "Results are Predicted Values from Varying Intercept, Varying Slope Model") + theme_minimal()
+```
+
+#### Perceived Democracy
+
+```{r}
+# specifying model
+mlm_n4 <- lmer(nationalgovt_trust ~ econ_condition + service_access + perceived_safety + governance_quality + perceived_democracy + female + age_group + education + religiosity + perc_socialstatus + perc_socialmobility + (1 + perceived_democracy|Region), data = indianbaro2, weights = w)
+summary(mlm_n4)
+
+# Country-level estimates
+round(ranef(mlm_n4)$Region, digits = 3)
+
+coef_mlmn4<- round(coef(mlm_n4)$Region, digits = 3)
+
+coef_mlmn4$Region <- rownames(coef_mlmn4)
+
+# Average estimates
+round(fixef(mlm_n4), digits = 3)
+
+clusters <- length(unique(coef_mlmn4$Region[!is.na(coef_mlmn4$Region)]))
+
+# Standard errors
+round(se.fixef(mlm_n4), digits = 3)
+```
+
+```{r}
+df_mlmn4<- data.frame(se.ranef = round(se.ranef(mlm_n4)$Region, digits = 3))
+
+df_mlmn4$Region <- rownames(df_mlmn4)
+```
+
+```{r}
+###Graph Random Slope Coefficients by Group Level 
+
+mlm_graphn4<-cbind(coef_mlmn4, df_mlmn4)
+mlm_graphn4<-clean_names(mlm_graphn4)
+names(mlm_graphn4)
+
+###Add CIs for the Random Slope Coefficients
+mlm_graphn4 <- mlm_graphn4 %>%
+  mutate(
+    lower_ci_va = perceived_democracy - 1.96 * se_ranef_perceived_democracy,
+    upper_ci_va = perceived_democracy + 1.96 * se_ranef_perceived_democracy
+  )
+
+mlm_graphn4$region<-reorder(mlm_graphn4$region, -mlm_graphn4$perceived_democracy) #reorder descending intercepts
+
+ggplot(mlm_graphn4, aes(x = region, y = perceived_democracy)) +
+  geom_point(size=3) +   theme_minimal(base_size = 13) +
+  labs(x = "State", y = "OLS Coefficient", 
+       title = "Impact of Perceived Democracy Level on National Government Trust", 
+       subtitle= "Results are OLS Coefficients from Varying Intercept, Varying Slope Model") +
+  labs(color = "Trust in National Government") +
+  theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1)) +
+  geom_errorbar(aes(ymin=lower_ci_va, ymax=upper_ci_va),
+                linewidth=.3,    # Thinner lines
+                width=.2, position = position_dodge(width=.7))+
+  scale_y_continuous(limits = c(0, 1.5), breaks = seq(0, 1.5, by = 0.5)) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylim(-0.5,0.5)
+
+###GGPredict for Predicted Values
+#More difficult with MLM models because you have to specify more attributes
+pred_mlmn4<-ggpredict(mlm_n4, terms=c("perceived_democracy", "Region"), 
+                    type="random", 
+          interval="confidence") 
+
+print(pred_mlmn4)
+
+###Make it a line plot
+ggplot(pred_mlmn4, aes(x = x, y = predicted)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  facet_wrap(~group, nrow = 3) +
+  labs(
+    x = "Perceived Democracy Level",
+    y = "Predicted National Government Trust",
+    title = "National Government Trust by State",
+    subtitle= "Results are Predicted Values from Varying Intercept, Varying Slope Model") +
+scale_x_discrete(limits = c("1","2","3","4","5","6","7","8","9","10"),labels = scales::wrap_format(10)) +
+  theme_minimal()
+
+```
+
+#### Perceived Public Service Access
+
+```{r}
+mlm_n5 <- lmer(nationalgovt_trust ~ econ_condition + service_access + perceived_safety + governance_quality + perceived_democracy + female + age_group + education + religiosity + perc_socialstatus + perc_socialmobility + (1 + service_access|Region), data = indianbaro2, weights = w)
+summary(mlm_n5)
+
+# Country-level estimates
+round(ranef(mlm_n5)$Region, digits = 3)
+
+coef_mlmn5<- round(coef(mlm_n5)$Region, digits = 3)
+
+coef_mlmn5$Region <- rownames(coef_mlmn5)
+
+# Average estimates
+round(fixef(mlm_n5), digits = 3)
+
+clusters <- length(unique(coef_mlmn5$Region[!is.na(coef_mlmn5$Region)]))
+
+# Standard errors
+round(se.fixef(mlm_n5), digits = 3)
+```
+
+```{r}
+# create dataframe with standard errors
+df_mlmn5<- data.frame(se.ranef = round(se.ranef(mlm_n5)$Region, digits = 3))
+
+# add region as a column
+df_mlmn5$Region <- rownames(df_mlmn5)
+```
+
+```{r}
+###Graph Random Slope Coefficients by Group Level 
+
+mlm_graphn5<-cbind(coef_mlmn5, df_mlmn5)
+mlm_graphn5<-clean_names(mlm_graphn5)
+names(mlm_graphn5)
+
+###Add CIs for the Random Slope Coefficients
+mlm_graphn5 <- mlm_graphn5 %>%
+  mutate(
+    lower_ci_va = service_access - 1.96 * se_ranef_service_access,
+    upper_ci_va = service_access + 1.96 * se_ranef_service_access
+  )
+
+mlm_graphn5$region<-reorder(mlm_graphn5$region, -mlm_graphn5$service_access) #reorder descending intercepts
+
+ggplot(mlm_graphn5, aes(x = region, y = service_access)) +
+  geom_point(size=3) +   theme_minimal(base_size = 13) +
+  labs(x = "State", y = "OLS Coefficient", 
+       title = "Impact of Perceived Public Service Access on National Government Trust", 
+       subtitle= "Results are OLS Coefficients from Varying Intercept, Varying Slope Model") +
+  labs(color = "Trust in National Government") +
+  theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1)) +
+  geom_errorbar(aes(ymin=lower_ci_va, ymax=upper_ci_va),
+                linewidth=.3,    # Thinner lines
+                width=.2, position = position_dodge(width=.7))+
+  scale_y_continuous(limits = c(0, 1.5), breaks = seq(0, 1.5, by = 0.5)) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylim(-1,1)
+
+###GGPredict for Predicted Values
+#More difficult with MLM models because you have to specify more attributes
+pred_mlmn5<-ggpredict(mlm_n5, terms=c("service_access", "Region"), 
+                    type="random", 
+          interval="confidence") 
+
+print(pred_mlmn5)
+
+# pred_mlmn5 <- pred_mlmn5 %>%
+#   filter(x == c(1,2,3,4))
+
+###Make it a line plot
+ggplot(pred_mlmn5, aes(x = x, y = predicted)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  facet_wrap(~group, nrow = 3) +
+  labs(
+    x = "Perceived Access to Public Services",
+    y = "Predicted National Government Trust",
+    title = "National Government Trust by State",
+    subtitle= "Results are Predicted Values from Varying Intercept, Varying Slope Model") +
+ scale_x_discrete(limits = c("Very difficult","Difficult","Easy","Very easy")) + theme_minimal()
+
+```
+- most important in Assam
+
+### Comparing IV Effects
+
+```{r}
+# comparing all five models in a table
+modelsummary::msummary(title = "Varying Intercepts-Varying Slopes Model Results for Trust in National Government", list("VIVS (Perceived Economic Conditions)" = mlm_n1,
+                "VIVS (Perceived Safety)" = mlm_n2,
+                "VIVS (Governance Quality)" = mlm_n3,
+              "VIVS (Perceived Democracy)" = mlm_n4,
+              "VIVS (Perceived Public Service Access)" = mlm_n5),
+              coef_rename = c("econ_condition" = "Perceived Economic Conditions",
+                         "service_access" = "Perceived Public Service Access",
+                         "perceived_safety" = "Perceived Safety",
+                         "governance_quality" = "Perceived Governance Quality",
+                         "perceived_democracy" = "Perceived Democracy Level",
+                         "female" = "Female",
+                         "age_group30-39" = "Age Group (30-39)",
+                         "age_group40-49" = "Age Group (40-49)",
+                         "age_group50-64" = "Age Group (50-64)",
+                         "age_group65+" = "Age Group (65+)",
+                         "education" = "Educational Attainment",
+                         "religiosity" = "Perceived Religiosity Level",
+                         "perc_socialstatus" = "Perceived Social Status Level",
+                         "perc_socialmobility" = "Perceived Social Mobility Level",
+"SD (Intercept Region)" = "State RE Intercept SD",
+"SD (econ_condition Region)" = "State RE Perceived Economic Conditions SD",
+"Cor (Intercept~econ_condition Region)" = "Correlation RE Int & Perceived Economic Conditions",
+"SD (perceived_safety Region)" = "State RE Perceived Safety SD",
+"Cor (Intercept~perceived_safety Region)" = "Correlation RE Int & Perceived Safety",
+"SD (governance_quality Region)" = "State RE Perceived Governance Quality SD",
+"Cor (Intercept~governance_quality Region)" = "Correlation RE Int & Perceived Governance Quality",
+"SD (perceived_democracy Region)" = "State RE Perceived Democracy Level SD",
+"Cor (Intercept~perceived_democracy Region)" = "Correlation RE Int & Perceived Democracy Level",
+"SD (service_access Region)" = "State RE Perceived Public Service Access SD",
+"Cor (Intercept~service_access Region)" = "Correlation RE Int & Perceived Public Service Access"))
+# output = "mlm_natl.png")
+```
+
+
+### Trust in Local Government
+Calculating ICC for the trust in the local government variable:
+```{r}
+###Varying Intercept Model - For Interclass Correlation 
+##NO Individual Level Predictors - local govt trust
+mlm_l <- lmer(localgovt_trust ~ 1 + (1|Region), data = indianbaro2, weights = w)
+summary(mlm_l)
+
+icc<-0.2233/(0.2233+1.9715)
+print(icc) #0.1017405
+```
+The interclass correlation for this model is 0.1, which indicates that there may be a clustering issue in the data. To deal with this, a multilevel model will be used that allows for slopes to vary based on group membership, in this case, state.
+
+#### Economic Condition
+
+```{r}
+mlm_l1 <- lmer(localgovt_trust ~ econ_condition + service_access + perceived_safety + governance_quality + perceived_democracy + female + age_group + education + religiosity + perc_socialstatus + perc_socialmobility + (1 + econ_condition|Region), data = indianbaro2, weights = w)
+summary(mlm_l1)
+
+# region-level estimates
+round(ranef(mlm_l1)$Region, digits = 3)
+
+coef_mlml1<- round(coef(mlm_l1)$Region, digits = 3)
+
+coef_mlml1$Region <- rownames(coef_mlml1)
+
+# Average estimates
+round(fixef(mlm_l1), digits = 3)
+
+clusters <- length(unique(coef_mlml1$Region[!is.na(coef_mlml1$Region)]))
+
+# Standard errors
+round(se.fixef(mlm_l1), digits = 3)
+```
+
+```{r}
+# create dataframe for standard errors
+df_mlml1<- data.frame( se.ranef = round(se.ranef(mlm_l1)$Region, digits = 3))
+
+# add region as column
+df_mlml1$Region <- rownames(df_mlml1)
+```
+
+```{r}
+###Graph Random Slope Coefficients by Group Level 
+
+mlm_graphl1<-cbind(coef_mlml1, df_mlml1)
+mlm_graphl1<-clean_names(mlm_graphl1)
+names(mlm_graphl1)
+
+###Add CIs for the Random Slope Coefficients
+mlm_graphl1 <- mlm_graphl1 %>%
+  mutate(
+    lower_ci_va = econ_condition - 1.96 * se_ranef_econ_condition,
+    upper_ci_va = econ_condition + 1.96 * se_ranef_econ_condition
+  )
+
+mlm_graphl1$region<-reorder(mlm_graphl1$region, -mlm_graphl1$econ_condition) #reorder descending intercepts
+
+ggplot(mlm_graphl1, aes(x = region, y = econ_condition)) +
+  geom_point(size=3) +   theme_minimal(base_size = 13) +
+  labs(x = "State", y = "OLS Coefficient", 
+       title = "Impact of Perceived Economic Conditions on Local Government Trust", 
+       subtitle= "Results are OLS Coefficients from Varying Intercept, Varying Slope Model") +
+  labs(color = "Trust in Local Government ") +
+  theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1)) +
+  geom_errorbar(aes(ymin=lower_ci_va, ymax=upper_ci_va),
+                linewidth=.3,    # Thinner lines
+                width=.2, position = position_dodge(width=.7))+
+  scale_y_continuous(limits = c(0, 1.5), breaks = seq(0, 1.5, by = 0.5)) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylim(-0.5,1)
+
+
+
+###GGPredict for Predicted Values
+#More difficult with MLM models because you have to specify more attributes
+pred_mlml1<-ggpredict(mlm_l1, terms=c("econ_condition", "Region"), 
+                    type="random", 
+          interval="confidence") 
+
+print(pred_mlml1)
+
+###Make it a line plot
+ggplot(pred_mlml1, aes(x = x, y = predicted)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  facet_wrap(~group, nrow = 3) +
+  labs(
+    x = "Perceived Economic Condition",
+    y = "Predicted Local Government Trust",
+    title = "Local Government Trust by State",
+    subtitle= "Results are Predicted Values from Varying Intercept, Varying Slope Model") +
+ scale_x_discrete(limits = c("Very bad","Bad","So so (not good nor bad)","Good","Very good"), labels = scales::wrap_format(10)) + theme_minimal()
+
+```
+
+#### Perceived Safety
+
+```{r}
+mlm_l2 <- lmer(localgovt_trust ~ econ_condition + service_access + perceived_safety + governance_quality + perceived_democracy + female + age_group + education + religiosity + perc_socialstatus + perc_socialmobility + (1 + perceived_safety|Region), data = indianbaro2, weights = w)
+summary(mlm_l2)
+
+# region-level estimates
+round(ranef(mlm_l2)$Region, digits = 3)
+
+coef_mlml2<- round(coef(mlm_l2)$Region, digits = 3)
+
+coef_mlml2$Region <- rownames(coef_mlml2)
+
+# Average estimates
+round(fixef(mlm_l2), digits = 3)
+
+clusters <- length(unique(coef_mlml2$Region[!is.na(coef_mlml2$Region)]))
+
+# Standard errors
+round(se.fixef(mlm_l2), digits = 3)
+```
+
+```{r}
+# create dataframe of standard errors
+df_mlml2<- data.frame( se.ranef = round(se.ranef(mlm_l2)$Region, digits = 3))
+
+# create new column for region name
+df_mlml2$Region <- rownames(df_mlml2)
+```
+
+```{r}
+###Graph Random Slope Coefficients by Group Level 
+
+mlm_graphl2<-cbind(coef_mlml2, df_mlml2)
+mlm_graphl2<-clean_names(mlm_graphl2)
+names(mlm_graphl2)
+
+###Add CIs for the Random Slope Coefficients
+mlm_graphl2 <- mlm_graphl2 %>%
+  mutate(
+    lower_ci_va = perceived_safety - 1.96 * se_ranef_perceived_safety,
+    upper_ci_va = perceived_safety + 1.96 * se_ranef_perceived_safety
+  )
+
+mlm_graphl2$region<-reorder(mlm_graphl2$region, -mlm_graphl2$perceived_safety) #reorder descending intercepts
+
+ggplot(mlm_graphl2, aes(x = region, y = perceived_safety)) +
+  geom_point(size=3) +   theme_minimal(base_size = 13) +
+  labs(x = "State", y = "OLS Coefficient", 
+       title = "Impact of Perceived Safety on Local Government Trust", 
+       subtitle= "Results are OLS Coefficients from Varying Intercept, Varying Slope Model") +
+  labs(color = "Trust in Local Government ") +
+  theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1)) +
+  geom_errorbar(aes(ymin=lower_ci_va, ymax=upper_ci_va),
+                linewidth=.3,    # Thinner lines
+                width=.2, position = position_dodge(width=.7))+
+  scale_y_continuous(limits = c(0, 1.5), breaks = seq(0, 1.5, by = 0.5)) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylim(-0.5,1)
+
+###GGPredict for Predicted Values
+#More difficult with MLM models because you have to specify more attributes
+pred_mlml2<-ggpredict(mlm_l2, terms=c("perceived_safety", "Region"), 
+                    type="random", 
+          interval="confidence") 
+
+print(pred_mlml2)
+
+###Make it a line plot
+ggplot(pred_mlml2, aes(x = x, y = predicted)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  facet_wrap(~group, nrow = 3) +
+  labs(
+    x = "Perceived Safety",
+    y = "Predicted Local Government Trust",
+    title = "Local Government Trust by State",
+    subtitle= "Results are Predicted Values from Varying Intercept, Varying Slope Model") +
+ scale_x_discrete(limits = c("Very unsafe","Unsafe","Safe","Very safe"), labels = scales::wrap_format(10)) + theme_minimal()
+
+```
+
+#### Governance Quality
+
+```{r}
+mlm_l3 <- lmer(localgovt_trust ~ econ_condition + service_access + perceived_safety + governance_quality + perceived_democracy + female + age_group + education + religiosity + perc_socialstatus + perc_socialmobility + (1 + governance_quality|Region), data = indianbaro2, weights = w)
+summary(mlm_l3)
+
+# region-level estimates
+round(ranef(mlm_l3)$Region, digits = 3)
+
+coef_mlml3<- round(coef(mlm_l3)$Region, digits = 3)
+
+coef_mlml3$Region <- rownames(coef_mlml3)
+
+# Average estimates
+round(fixef(mlm_l3), digits = 3)
+
+clusters <- length(unique(coef_mlml3$Region[!is.na(coef_mlml3$Region)]))
+
+# Standard errors
+round(se.fixef(mlm_l3), digits = 3)
+```
+
+```{r}
+# create dataframe of standard errors
+df_mlml3<- data.frame(se.ranef = round(se.ranef(mlm_l3)$Region, digits = 3))
+
+# add column of region name
+df_mlml3$Region <- rownames(df_mlml3)
+```
+
+
+```{r}
+###Graph Random Slope Coefficients by Group Level 
+
+mlm_graphl3<-cbind(coef_mlml3, df_mlml3)
+mlm_graphl3<-clean_names(mlm_graphl3)
+names(mlm_graphl3)
+
+###Add CIs for the Random Slope Coefficients
+mlm_graphl3 <- mlm_graphl3 %>%
+  mutate(
+    lower_ci_va = governance_quality - 1.96 * se_ranef_governance_quality,
+    upper_ci_va = governance_quality + 1.96 * se_ranef_governance_quality
+  )
+
+mlm_graphl3$region<-reorder(mlm_graphl3$region, -mlm_graphl3$governance_quality) #reorder descending intercepts
+
+ggplot(mlm_graphl3, aes(x = region, y = governance_quality)) +
+  geom_point(size=3) +   theme_minimal(base_size = 13) +
+  labs(x = "State", y = "OLS Coefficient", 
+       title = "Impact of Perceived Governance Quality on Local Government Trust", 
+       subtitle= "Results are OLS Coefficients from Varying Intercept, Varying Slope Model") +
+  labs(color = "Trust in Local Government") +
+  theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1)) +
+  geom_errorbar(aes(ymin=lower_ci_va, ymax=upper_ci_va),
+                linewidth=.3,    # Thinner lines
+                width=.2, position = position_dodge(width=.7))+
+  scale_y_continuous(limits = c(0, 1.5), breaks = seq(0, 1.5, by = 0.5)) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylim(-0.5,1.5)
+
+###GGPredict for Predicted Values
+#More difficult with MLM models because you have to specify more attributes
+pred_mlml3<-ggpredict(mlm_l3, terms=c("governance_quality", "Region"), 
+                    type="random", 
+          interval="confidence") 
+
+print(pred_mlml3)
+
+###Make it a line plot
+ggplot(pred_mlml3, aes(x = x, y = predicted)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  facet_wrap(~group, nrow = 3) +
+  labs(
+    x = "Perceived Governance Quality",
+    y = "Predicted Local Government Trust",
+    title = "Local Government Trust by State",
+    subtitle= "Results are Predicted Values from Varying Intercept, Varying Slope Model") +
+ scale_x_continuous(limits = c(1,4)) + theme_minimal()
+
+```
+
+#### Perceived Democracy
+
+```{r}
+mlm_l4 <- lmer(localgovt_trust ~ econ_condition + service_access + perceived_safety + governance_quality + perceived_democracy + female + age_group + education + religiosity + perc_socialstatus + perc_socialmobility + (1 + perceived_democracy|Region), data = indianbaro2, weights = w)
+summary(mlm_l4)
+
+# region-level estimates
+round(ranef(mlm_l4)$Region, digits = 3)
+
+coef_mlml4<- round(coef(mlm_l4)$Region, digits = 3)
+
+coef_mlml4$Region <- rownames(coef_mlml4)
+
+# Average estimates
+round(fixef(mlm_l4), digits = 3)
+
+clusters <- length(unique(coef_mlml4$Region[!is.na(coef_mlml4$Region)]))
+
+# Standard errors
+round(se.fixef(mlm_l4), digits = 3)
+```
+
+```{r}
+# dataframe of SE
+df_mlml4<- data.frame(se.ranef = round(se.ranef(mlm_l4)$Region, digits = 3))
+
+# add region as a column
+df_mlml4$Region <- rownames(df_mlml4)
+```
+
+```{r}
+###Graph Random Slope Coefficients by Group Level 
+
+mlm_graphl4<-cbind(coef_mlml4, df_mlml4)
+mlm_graphl4<-clean_names(mlm_graphl4)
+names(mlm_graphl4)
+
+###Add CIs for the Random Slope Coefficients
+mlm_graphl4 <- mlm_graphl4 %>%
+  mutate(
+    lower_ci_va = perceived_democracy - 1.96 * se_ranef_perceived_democracy,
+    upper_ci_va = perceived_democracy + 1.96 * se_ranef_perceived_democracy
+  )
+
+mlm_graphl4$region<-reorder(mlm_graphl4$region, -mlm_graphl4$perceived_democracy) #reorder descending intercepts
+
+ggplot(mlm_graphl4, aes(x = region, y = perceived_democracy)) +
+  geom_point(size=3) +   theme_minimal(base_size = 13) +
+  labs(x = "State", y = "OLS Coefficient", 
+       title = "Impact of Perceived Democracy Level on Local Government Trust", 
+       subtitle= "Results are OLS Coefficients from Varying Intercept, Varying Slope Model") +
+  labs(color = "Trust in Local Government") +
+  theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1)) +
+  geom_errorbar(aes(ymin=lower_ci_va, ymax=upper_ci_va),
+                linewidth=.3,    # Thinner lines
+                width=.2, position = position_dodge(width=.7))+
+  scale_y_continuous(limits = c(0, 1.5), breaks = seq(0, 1.5, by = 0.5)) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylim(-0.5,1)
+
+###GGPredict for Predicted Values
+#More difficult with MLM models because you have to specify more attributes
+pred_mlml4<-ggpredict(mlm_l4, terms=c("perceived_democracy", "Region"), 
+                    type="random", 
+          interval="confidence") 
+
+print(pred_mlml4)
+
+###Make it a line plot
+ggplot(pred_mlml4, aes(x = x, y = predicted)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  facet_wrap(~group, nrow = 3) +
+  labs(
+    x = "Perceived Democracy Level",
+    y = "Predicted Local Government Trust",
+    title = "Local Government Trust by State",
+    subtitle= "Results are Predicted Values from Varying Intercept, Varying Slope Model") +
+ scale_x_discrete(limits = c("1","2","3","4","5","6","7","8","9","10")) + theme_minimal()
+
+```
+
+#### Perceived Public Service Access
+
+```{r}
+mlm_l5 <- lmer(localgovt_trust ~ econ_condition + service_access + perceived_safety + governance_quality + perceived_democracy + female + age_group + education + religiosity + perc_socialstatus + perc_socialmobility + (1 + service_access|Region), data = indianbaro2, weights = w)
+summary(mlm_l5)
+
+
+# region-level estimates
+round(ranef(mlm_l5)$Region, digits = 3)
+
+coef_mlml5<- round(coef(mlm_l5)$Region, digits = 3)
+
+coef_mlml5$Region <- rownames(coef_mlml5)
+
+# Average estimates
+round(fixef(mlm_l5), digits = 3)
+
+clusters <- length(unique(coef_mlml5$Region[!is.na(coef_mlml5$Region)]))
+
+# Standard errors
+round(se.fixef(mlm_l5), digits = 3)
+```
+
+```{r}
+# create dataframe of SEs
+df_mlml5<- data.frame(se.ranef = round(se.ranef(mlm_l5)$Region, digits = 3))
+
+# add region as a column
+df_mlml5$Region <- rownames(df_mlml5)
+```
+
+```{r}
+###Graph Random Slope Coefficients by Group Level 
+
+mlm_graphl5<-cbind(coef_mlml5, df_mlml5)
+mlm_graphl5<-clean_names(mlm_graphl5)
+names(mlm_graphl5)
+
+###Add CIs for the Random Slope Coefficients
+mlm_graphl5 <- mlm_graphl5 %>%
+  mutate(
+    lower_ci_va = service_access - 1.96 * se_ranef_service_access,
+    upper_ci_va = service_access + 1.96 * se_ranef_service_access
+  )
+
+mlm_graphl5$region<-reorder(mlm_graphl5$region, -mlm_graphl5$service_access) #reorder descending intercepts
+
+ggplot(mlm_graphl5, aes(x = region, y = service_access)) +
+  geom_point(size=3) +   theme_minimal(base_size = 13) +
+  labs(x = "State", y = "OLS Coefficient", 
+       title = "Impact of Perceived Public Service Access on Local Government Trust", 
+       subtitle= "Results are OLS Coefficients from Varying Intercept, Varying Slope Model") +
+  labs(color = "Trust in Local Government") +
+  theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1)) +
+  geom_errorbar(aes(ymin=lower_ci_va, ymax=upper_ci_va),
+                linewidth=.3,    # Thinner lines
+                width=.2, position = position_dodge(width=.7))+
+  scale_y_continuous(limits = c(0, 1.5), breaks = seq(0, 1.5, by = 0.5)) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylim(-1,1.5)
+
+###GGPredict for Predicted Values
+#More difficult with MLM models because you have to specify more attributes
+pred_mlml5<-ggpredict(mlm_l5, terms=c("service_access", "Region"), 
+                    type="random", 
+          interval="confidence") 
+
+print(pred_mlml5)
+
+###Make it a line plot
+ggplot(pred_mlml5, aes(x = x, y = predicted)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  facet_wrap(~group, nrow = 3) +
+  labs(
+    x = "Perceived Access to Public Services",
+    y = "Predicted Local Government Trust",
+    title = "Local Government Trust by State",
+    subtitle= "Results are Predicted Values from Varying Intercept, Varying Slope Model") +
+ scale_x_discrete(limits = c("Very difficult","Difficult","Easy","Very easy")) + theme_minimal()
+
+```
+
+#### Comparing IV Effects
+
+Comparing all five models generated above:
+```{r}
+modelsummary::msummary(title = "Varying Intercepts-Varying Slopes Model Results for Trust in Local Government",list("VIVS (Perceived Economic Conditions)" = mlm_l1,
+                "VIVS (Perceived Safety)" = mlm_l2,
+                "VIVS (Governance Quality)" = mlm_l3,
+              "VIVS (Perceived Democracy)" = mlm_l4,
+              "VIVS (Perceived Public Service Access)" = mlm_l5),
+                            coef_rename = c("econ_condition" = "Perceived Economic Conditions",
+                         "service_access" = "Perceived Public Service Access",
+                         "perceived_safety" = "Perceived Safety",
+                         "governance_quality" = "Perceived Governance Quality",
+                         "perceived_democracy" = "Perceived Democracy Level",
+                         "female" = "Female",
+                         "age_group30-39" = "Age Group (30-39)",
+                         "age_group40-49" = "Age Group (40-49)",
+                         "age_group50-64" = "Age Group (50-64)",
+                         "age_group65+" = "Age Group (65+)",
+                         "education" = "Educational Attainment",
+                         "religiosity" = "Perceived Religiosity Level",
+                         "perc_socialstatus" = "Perceived Social Status Level",
+                         "perc_socialmobility" = "Perceived Social Mobility Level",
+"SD (Intercept Region)" = "State RE Intercept SD",
+"SD (econ_condition Region)" = "State RE Perceived Economic Conditions SD",
+"Cor (Intercept~econ_condition Region)" = "Correlation RE Int & Perceived Economic Conditions",
+"SD (perceived_safety Region)" = "State RE Perceived Safety SD",
+"Cor (Intercept~perceived_safety Region)" = "Correlation RE Int & Perceived Safety",
+"SD (governance_quality Region)" = "State RE Perceived Governance Quality SD",
+"Cor (Intercept~governance_quality Region)" = "Correlation RE Int & Perceived Governance Quality",
+"SD (perceived_democracy Region)" = "State RE Perceived Democracy Level SD",
+"Cor (Intercept~perceived_democracy Region)" = "Correlation RE Int & Perceived Democracy Level",
+"SD (service_access Region)" = "State RE Perceived Public Service Access SD",
+"Cor (Intercept~service_access Region)" = "Correlation RE Int & Perceived Public Service Access"),
+            output = "mlm_local.png")
+```
